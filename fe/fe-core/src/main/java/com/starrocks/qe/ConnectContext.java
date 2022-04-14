@@ -77,6 +77,8 @@ public class ConnectContext {
     protected MysqlChannel mysqlChannel;
     // state
     protected QueryState state;
+    // error code
+    protected String errorCode;
     protected long returnRows;
     // the protocol capability which server say it can support
     protected MysqlCapability serverCapability;
@@ -335,6 +337,14 @@ public class ConnectContext {
 
     public void setState(QueryState state) {
         this.state = state;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
     }
 
     public MysqlCapability getCapability() {
