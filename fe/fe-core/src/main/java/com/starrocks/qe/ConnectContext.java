@@ -82,7 +82,7 @@ public class ConnectContext {
 
     protected QueryState state;
     // error code
-    protected String errorCode;
+    protected String errorCode = "";
     protected long returnRows;
 
     // the protocol capability which server say it can support

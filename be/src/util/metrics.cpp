@@ -143,11 +143,13 @@ MetricRegistry::~MetricRegistry() {
 
 bool MetricRegistry::register_metric(const std::string& name, const MetricLabels& labels, Metric* metric) {
     DCHECK(metric != nullptr);
+    LOG(INFO) << "register_metric:" << name;
     metric->hide();
     std::unique_lock lock(_mutex);
     MetricCollector* collector = nullptr;
     auto it = _collectors.find(name);
     if (it == _collectors.end()) {
+        LOG(INFO) << "new metricsCollector:" << name;
         collector = new MetricCollector();
         _collectors.emplace(name, collector);
     } else {
