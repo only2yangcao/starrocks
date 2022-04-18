@@ -96,16 +96,63 @@ void WorkGroupManager::destroy() {
     _driver_worker_owner_manager.reset(nullptr);
     _scan_worker_owner_manager.reset(nullptr);
     _workgroups.clear();
+    update_metrics();
 }
 
 WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     std::unique_lock write_lock(_mutex);
     auto unique_id = wg->unique_id();
     create_workgroup_unlocked(wg);
+    add_metrics(wg);
     if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version()) {
         return _workgroups[unique_id];
     } else {
         return get_default_workgroup();
+    }
+}
+
+void WorkGroupManager::add_metrics(const WorkGroupPtr& wg) {
+    if(!_init_metrics) {
+        _init_metrics=true;
+        StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook", [this] {update_metrics();});
+    }
+    if(_wg_metrics.count(wg->name)==0) {
+        //cpu limit
+        METRIC_DEFINE_DOUBLE_GAUGE(cpu_resource_group_limit, MetricUnit::PERCENT);
+        //cpu concurrent
+        METRIC_DEFINE_DOUBLE_GAUGE(cpu_resource_group, MetricUnit::PERCENT);
+        //mem limit
+        METRIC_DEFINE_INT_GAUGE(memory_resource_group_limit_bytes, MetricUnit::BYTES);
+        //mem concurrent
+        METRIC_DEFINE_INT_GAUGE(memory_resource_group_allocated_bytes, MetricUnit::BYTES);
+
+        _wg_cpu_limit_metrics[wg->name] = &cpu_resource_group_limit;
+        _wg_cpu_metrics[wg->name] = &cpu_resource_group;
+        _wg_mem_limit_metrics[wg->name] = &memory_resource_group_limit_bytes;
+        _wg_mem_metrics[wg->name] = &memory_resource_group_allocated_bytes;
+
+        StarRocksMetrics::instance()->metrics()->register_metric("cpu_resource_group_limit", MetricLabels().add("name", wg->name), &cpu_resource_group_limit);
+        StarRocksMetrics::instance()->metrics()->register_metric("cpu_resource_group", MetricLabels().add("name", wg->name), &cpu_resource_group);
+        StarRocksMetrics::instance()->metrics()->register_metric("memory_resource_group_limit_bytes", MetricLabels().add("name", wg->name), &memory_resource_group_limit_bytes);
+        StarRocksMetrics::instance()->metrics()->register_metric("memory_resource_group_allocated_bytes", MetricLabels().add("name", wg->name), &memory_resource_group_allocated_bytes);
+    }
+    _wg_metrics[wg->name] = wg->unique_id();
+}
+
+void WorkGroupManager::update_metrics() {
+    for (auto& wg_metric : _wg_metrics) {
+        WorkGroupPtr wg = _workgroups[wg_metric.second];
+        if(wg != nullptr) {
+            _wg_cpu_limit_metrics[wg_metric.first].set_value(wg->get_cpu_expected_use_ratio());
+            _wg_cpu_metrics[wg_metric.first].set_value(wg->get_cpu_actual_use_ratio());
+            _wg_mem_limit_metrics[wg_metric.first].set_value(wg->mem_limit());
+            _wg_mem_metrics[wg_metric.first].set_value(wg->mem_tracker()->consumption());
+        } else {
+            _wg_cpu_limit_metrics[wg_metric.first].set_value(0);
+            _wg_cpu_metrics[wg_metric.first].set_value(0);
+            _wg_mem_limit_metrics[wg_metric.first].set_value(0);
+            _wg_mem_metrics[wg_metric.first].set_value(0);
+        }
     }
 }
 
